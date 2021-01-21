@@ -2235,32 +2235,43 @@ def test_retain_newline(tmpdir, configfile, newline):
     # and that it is of the right type
     assert new_config.endswith(b"[bumpversion:file:file.py]" + newline)
 
+
 @pytest.mark.parametrize("encoding", [None, "utf-8", "latin1"])
 def test_file_encoding(tmpdir, configfile, encoding):
-    tmpdir.join("file.py").write_binary(dedent("""
+    # Write a file with non-ASCII characters encoded in the given
+    # encoding.  Manually encode and save as binary.
+    file_encoding = encoding or "utf-8"
+    non_ascii_content = dedent("""
         0.7.2
         Some encoded Content: äöüß
-        """).strip().encode(encoding=encoding or "utf-8"))
+    """).strip()
+    binary_content = non_ascii_content.encode(encoding=file_encoding)
+    tmpdir.join("file.txt").write_binary(binary_content)
     tmpdir.chdir()
 
-    if encoding is None:
-        configstring = ""
-    else:
-        configstring = "encoding = %s" % encoding
-
+    # Write configuration file (itself UTF-8) with matching encoding setting.
+    configstring = "" if encoding is None else "encoding = " + encoding
     tmpdir.join(configfile).write_binary(dedent(("""
         [bumpversion]
         current_version = 0.7.2
-        search = {current_version}
-        replace = {new_version}
-        [bumpversion:file:file.py]
-	%s
-        """) % configstring).strip().encode(encoding='UTF-8'))
+        search = {{current_version}}
+        replace = {{new_version}}
+        [bumpversion:file:file.txt]
+        {encoding}
+    """).format(encoding=configstring)).strip().encode(encoding='UTF-8'))
 
     # Ensure the program works (without any exceptions or errors)
     # regardless of encoding if the encoding is configured
-    # correctly
+    # correctly.
     main(["major"])
+
+    # Verify the file content is correct.
+    expected_content = dedent("""
+        1.0.0
+        Some encoded Content: äöüß
+    """).strip()
+    read_content = tmpdir.join("file.txt").read_binary().decode(encoding=file_encoding)
+    assert read_content == expected_content
 
 
 def test_no_configured_files(tmpdir, vcs):
